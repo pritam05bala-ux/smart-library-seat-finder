@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Smart Library Seat Finder</title>
+<style>
+:root{--bg:#f5ede0;--card:#fffaf2;--ink:#2a1004;--mut:#7a5a44;--acc:#7a4320;--ok:#2f8f3f;--okbg:#e2f3e4;--bad:#c53030;--badbg:#fbe4e4;--line:#e3d3bd;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#240c03;--card:#33170b;--ink:#f6e8d2;--mut:#c9a98a;--acc:#e0a46a;--ok:#5cc16d;--okbg:#1d3a22;--bad:#ff7b7b;--badbg:#4a1f1f;--line:#52301c}}
+:root[data-theme="dark"]{--bg:#240c03;--card:#33170b;--ink:#f6e8d2;--mut:#c9a98a;--acc:#e0a46a;--ok:#5cc16d;--okbg:#1d3a22;--bad:#ff7b7b;--badbg:#4a1f1f;--line:#52301c}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Georgia,"Times New Roman",serif;line-height:1.4}
+.wrap{max-width:760px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:28px;margin:0 0 2px;color:var(--acc)}
+.sub{color:var(--mut);margin:0 0 18px;font-family:system-ui,sans-serif;font-size:14px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;font-family:system-ui,sans-serif}
+.stat{border-radius:14px;padding:14px 16px;font-weight:700;font-size:15px}
+.stat b{display:block;font-size:34px;line-height:1.1}
+.stat.ok{background:var(--okbg);color:var(--ok)}.stat.bad{background:var(--badbg);color:var(--bad)}
+.bar{height:10px;border-radius:6px;background:var(--badbg);overflow:hidden;margin-bottom:18px}
+.bar i{display:block;height:100%;background:var(--ok);transition:width .4s}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px}
+.seat{background:var(--card);border:2px solid var(--line);border-radius:14px;padding:14px 10px;text-align:center;cursor:pointer;font-family:system-ui,sans-serif;color:var(--ink);transition:transform .1s,border-color .2s}
+.seat:active{transform:scale(.97)}
+.seat.free{border-color:var(--ok)}.seat.busy{border-color:var(--bad)}
+.seat svg{width:44px;height:44px}
+.seat .n{font-weight:700;margin-top:4px}
+.seat .s{font-size:13px;margin-top:2px}
+.free .s{color:var(--ok)}.busy .s{color:var(--bad)}
+.free svg{fill:var(--ok)}.busy svg{fill:var(--bad)}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0;font-family:system-ui,sans-serif}
+button{font:inherit;font-size:14px;padding:9px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button.on{background:var(--acc);color:var(--bg);border-color:var(--acc)}
+.qr{display:flex;gap:18px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-top:22px;font-family:system-ui,sans-serif}
+#qrbox{background:#fff;padding:10px;border-radius:10px;line-height:0}
+.qr h2{margin:0 0 4px;font-size:18px;color:var(--acc);font-family:Georgia,serif}
+.qr p{margin:0 0 8px;color:var(--mut);font-size:14px}
+.qr input{width:100%;min-width:200px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:13px}
+.note{color:var(--mut);font-size:12px;margin-top:14px;font-family:system-ui,sans-serif}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Smart Library Seat Finder</h1>
+  <p class="sub">Find a seat before you search for a seat. Tap a seat to simulate a pressure sensor.</p>
+  <div class="stats">
+    <div class="stat ok">Available<b id="av">0</b></div>
+    <div class="stat bad">Occupied<b id="oc">0</b></div>
+  </div>
+  <div class="bar"><i id="fill"></i></div>
+  <div class="grid" id="grid"></div>
+  <div class="row">
+    <button id="live">Live demo: off</button>
+    <button id="reset">Reset</button>
+  </div>
+  <p class="note">Demo data. In the real prototype, ESP32 + FSR sensors update each seat over Wi-Fi.</p>
+</div>
+<script>
+var seats=[0,1,0,0,1,0,1,0].map(function(v){return v}); // 1 = occupied
+var grid=document.getElementById('grid'),timer=null;
+var chair='<svg viewBox="0 0 24 24"><path d="M7 3h10a2 2 0 0 1 2 2v7h1v3h-2v5h-2v-5H9v5H7v-5H5v-3h1V5a2 2 0 0 1 1-2zm0 2v7h10V5H7z"/></svg>';
+function render(){
+  var oc=seats.reduce(function(a,b){return a+b},0),av=seats.length-oc;
+  document.getElementById('av').textContent=av;
+  document.getElementById('oc').textContent=oc;
+  document.getElementById('fill').style.width=(av/seats.length*100)+'%';
+  grid.innerHTML='';
+  seats.forEach(function(v,i){
+    var b=document.createElement('button');
+    b.className='seat '+(v?'busy':'free');
+    b.setAttribute('aria-label','Seat S'+(i+1)+(v?' occupied':' available'));
+    b.innerHTML=chair+'<div class="n">S'+(i+1)+'</div><div class="s">'+(v?'Occupied':'Available')+'</div>';
+    b.onclick=function(){seats[i]=v?0:1;render()};
+    grid.appendChild(b);
+  });
+}
+document.getElementById('live').onclick=function(){
+  var b=this;
+  if(timer){clearInterval(timer);timer=null;b.textContent='Live demo: off';b.classList.remove('on');return}
+  b.textContent='Live demo: on';b.classList.add('on');
+  timer=setInterval(function(){var i=Math.floor(Math.random()*seats.length);seats[i]=seats[i]?0:1;render()},2000);
+};
+document.getElementById('reset').onclick=function(){seats=[0,1,0,0,1,0,1,0];render()};
+render();
+</script>
+</body>
+</html>
